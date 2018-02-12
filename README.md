@@ -7,4 +7,6 @@ Thanks for joining our 2018 MPFI Neuroimaging Workshop this year! This code repo
 <br /> - segment out cellular ROIs in a semi-automated way with the Cell Magic Wand tool written by Theo Walker
 <br /> - extract out fluorescence timecourses for both our cells and the surrounding neuropil.
 <br /> - convert raw fluorescence timecourses to ΔF/Fo. Fo is accurately computed by via a moving percentile-filter.
-<br /> - basic analysis code that will allow you to inspect the individual response traces of every cell, the impact of neuropil contamination on cellular responses, the tuning of each cells for a stimulus (here the stimulus orientation of our gratings), and distant-dependent noise correlations.
+<br /> - basic analysis code that will allow you to inspect the individual response traces of each cell, the impact of neuropil contamination on cellular responses, the degree of tuning in each cell for our visual stimulus (here the the stimulus is a drifting grating of different orientations), and the fall-off of response correlations between neurons (including signal and noise correlations).
+
+Please feel free to send me an email for any questions on using this code at david.whitney@mpfi.org!
