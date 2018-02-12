@@ -3,13 +3,14 @@
 loadImagingData = true;  % Loads imaging data into MATLAB
     registerImagingStack = false;  % This flag denotes whether we want to register our full imaging stack. Else it loads previously registered data.
     useDownsampledStack  = true;   % This flag can be used if you want just to use the 200X temporally downsampled stack. registerImagingStack flag must be set to false.
-    ROIsToLoad = 'CellMagicWand';  % ROIs can be either 'None','CellMagicWand','Suite2p'
+    ROIsToLoad = 'Suite2p';  % ROIs can be either 'None','CellMagicWand','Suite2p'
 recomputeTraces      = false;   % Recomputes cellular responses (can take awhile)
     neuropilCorrectionType = 'none'; % can be 'none', fixed' (i.e. 0.7), and 'adaptive'
 showCellsVsNeuropil  = false;   % Compares the correlation of cells and neuropil responses
 showDeltaFOverF      = false;   % Shows how the percentile filter works
 showTuningCurves     = false;   % Shows tuning curves and trial evoked responses
 showFunctionalMaps   = false;   % Shows functional maps
+showCorrelations     = false;    % Show correlations as a function of distance
 
 %% Specify where you saved your course data and change MATLAB course directory. We also need to specify where MATLAB and ImageJ are
 baseDirectory = 'H:\WinterCourse\';
@@ -64,8 +65,8 @@ if loadImagingData
         
     % Generate neuropil ROIs
     cellNumber = RC.getCount();     % You should have 199 if you use the ROIs provided
-    %generateNeuropilROIs(RC.getRoisAsArray,round(30/spatialResolution),round(5/spatialResolution)); % Generates neuropil ROIs - Adds an an additional 199 ROIs
-    generateNeuropilROIs(RC.getRoisAsArray); % Generates neuropil ROIs - Adds an an additional 199 ROIs
+    generateNeuropilROIs(RC.getRoisAsArray,round(30/spatialResolution),round(5/spatialResolution)); % Generates neuropil ROIs - Adds an an additional 199 ROIs
+    %generateNeuropilROIs(RC.getRoisAsArray); % Generates neuropil ROIs - Adds an an additional 199 ROIs
 end
 
 %% Extract fluorsescence timecourse for each cellular ROI using MIJ
@@ -153,7 +154,14 @@ if recomputeTraces
         cells.f0(i) = prctile(cells.rawF(i,:),percentileCutOff,2);
     end
 else
-    load([baseDirectory 'analyzedData\cellularData_Downsampling2x_NoNeuropilSubtraction.mat']);
+    switch neuropilCorrectionType
+        case 'adaptive'
+            load([baseDirectory 'analyzedData\cellularData_Downsampling2x_AdaptiveCorrection.mat']);
+        case 'fixed'
+            load([baseDirectory 'analyzedData\cellularData_Downsampling2x_FixedCorrection']);
+        case 'none'
+            load([baseDirectory 'analyzedData\cellularData_Downsampling2x_NoNeuropilSubtraction.mat']);
+    end
 end
 
 % Show the response timecourse of all cells and surrounding neuropil
@@ -200,9 +208,12 @@ if(showDeltaFOverF)
     figure;
     for i=1:10:cellNumber % Looking at every 10th cell
         hold on; 
-        plot(cells.rawF(i,:),'k');
-        plot(cells.baseline(i,:),'r');
-        plot(cells.f0(i)+0*cells.rawF(i,:),'b');
+        if(0)
+            plot(cells.rawF(i,:),'k');
+            plot(cells.baseline(i,:),'r');
+            plot(cells.f0(i)+0*cells.rawF(i,:),'b');
+        end
+        
         legend({'Raw cell trace','Moving filter baseline','Fixed baseline'});
         title(['Cell number ', num2str(i)]);
         ylabel('Raw fluorescence'); 
@@ -221,6 +232,22 @@ if(showDeltaFOverF)
     xlabel('Time (in frames)');
     colorbar;
     caxis([0 3]);
+end
+
+if(0)
+figure;
+for i=1:10:cellNumber % Looking at every 10th cell
+    plot(cells.rawF(i,:),'k');     hold on; 
+    plot(cells.rawF_neuropil(i,:),'r');
+    plot(cellsA.rawF(i,:),'b');
+
+    legend({'Raw cell trace','Neuropil trace','Corrected cell trace'});
+    title(['Cell number ', num2str(i)]);
+    ylabel('Raw fluorescence'); 
+    xlabel('Time (in frames)');
+    pause;
+    clf;
+end
 end
 
 % Find stimulus onsets
@@ -360,7 +387,7 @@ if(showFunctionalMaps)
             hold on;
             for i = 1:cellNumber %% Now wel'll add each cell to our blank images
                 markerSize = round(markerMax*selectivity(i));
-                if(markerSize==0), continue; end
+                if(markerSize==0 | isnan(markerSize)), continue; end
                 plot(cells.xPos(i),cells.yPos(i),'ok','MarkerSize',markerSize,'MarkerFaceColor',LUT(1+floor(theta(i)) ,:));
             end
 
@@ -387,5 +414,62 @@ if(showFunctionalMaps)
             axis square;
             set(gca,'Box','off');
             set(hBar,'BarWidth',0.8);
+    end
+end
+
+% Show cellular correlations as a function of distance (response, signal,
+% and noise)
+if(showCorrelations)
+    %h=figure(); h2=figure(); h3 = figure;
+    correlationTypes = {'Response','Signal','Noise'};
+    for(corrType = 1:length(correlationTypes))
+        % Define response matrix
+        [nCells,nStims,nTrials] = size(cells.meanStimResponse);
+        switch correlationTypes{corrType}
+            case 'Response'
+                responseMatrix = reshape(cells.meanStimResponse,[nCells nStims*nTrials]);
+                yLimits = [-0.1,0.25];
+            case 'Signal'
+                responseMatrix = mean(cells.meanStimResponse,3);
+                yLimits = [-0.5,0.5];
+            case 'Noise'
+                responseMatrix = reshape(zscore(cells.meanStimResponse,0,3),[nCells nStims*nTrials]);
+                yLimits = [0,0.4];
+        end
+        responseMatrix(isnan(responseMatrix(:)))=0;
+        
+        % Create correlation table
+        responseMatrix = zscore(responseMatrix,0,2);
+        correlationTable = (responseMatrix*responseMatrix')/size(responseMatrix,2);
+        figure(h); subplot(1,3,corrType); 
+            imagesc(correlationTable); 
+            colormap(redWhiteBlueLUT); axis image; caxis(0.75*[-1 1])
+            title([correlationTypes{corrType} ' correlation']);
+
+        % Create pairwise distance and correlations
+        correlations = correlationTable(logical(triu(1+0*correlationTable,1)'));
+        distances    = pdist([cells.xPos,cells.yPos])';
+        distanceBins = linspace(0,600,20);
+        corrBins     = linspace(-0.25,1,20);
+        
+        % Show density plot of correlations as a function of distance
+        figure(h2); subplot(1,3,corrType); 
+            densityScatterPlot(distances,correlations,distanceBins,corrBins); colormap(jet);
+            xlabel('Distance (\mum)'); ylabel([correlationTypes{corrType} ' correlation']);
+            hold on;
+            
+        % Show scatter plot of correlations as a function of distance (Mean+/-SEM)
+        figure(h3); subplot(1,3,corrType); 
+            curveStats = zeros(length(distanceBins)-1,2);
+            for(i=1:(length(distanceBins)-1))
+                validDistances  = distances>=distanceBins(i)&distances>=distanceBins(i+1);
+                curveStats(i,1) = mean(correlations(validDistances));
+                curveStats(i,2) = std(correlations(validDistances))/sqrt(length(validDistances));
+            end
+            errorbar(distanceBins(1:(end-1)),curveStats(:,1),curveStats(:,2),'--k','LineWidth',3);
+            ylim(yLimits); axis square;
+            xlabel('Distance (\mum)'); ylabel([correlationTypes{corrType} ' correlation']);
+            set(gca,'Box','off');
+            hold on;
     end
 end
