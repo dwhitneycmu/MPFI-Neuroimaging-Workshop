@@ -1,4 +1,4 @@
-function [tifStack,xyShifts] = imageRegistration(tifStack,imageRegistrationMethod,spatialResolution,filterCutoff,templateImage)
+function [tifStack,xyShifts] = imageRegistration(tifStack,imageRegistrationMethod,spatialResolution,filterCutOff,templateImage)
 % [tifStack,xyShifts] = imageRegistration(tifStack,imageRegistrationMethod,spatialResolution,filterCutoff,templateImage)
 % Registers imaging stack to a template image using either a DFT-based subpixel method ('subMicronMethod') or a
 % rigid-body transform ('downsampleReg'). The template image can be directly specified, or the
